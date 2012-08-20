@@ -39,7 +39,7 @@
  
 $plugin_info = array(
 	'pi_name'		=> 'Randember',
-	'pi_version'	=> '1.0.3',
+	'pi_version'	=> '1.0.4',
 	'pi_author'		=> 'Benjamin Bixby',
 	'pi_author_url'	=> 'http://benjaminbixby.com',
 	'pi_description'=> 'Returns a random member.',

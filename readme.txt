@@ -36,6 +36,11 @@ I make use of the PHP function array_rand() to pull out a random member id... Un
 
 Changelog
 
+V 1.0.4
+Added by Elliot Lewis 20/08/12
+Removed PHP array and random. Random member selection in MySQL. This may be an issue with large member tables
+Added session storing of last random member so same member will not appear twice. Need move than 1 member in table!
+
 V 1.0.3
 - Nov 22, 2011
 Small change to MySQL WHERE clause
