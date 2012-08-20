@@ -24,6 +24,19 @@
  * @link		http://benjaminbixby.com
  */
 
+/**
+ * Version history
+ *
+ 	1.0.4
+ 	Added by Elliot Lewis 20/08/12
+ 	Removed PHP array and random. Random member selection in MySQL. This may be an issue with large member tables
+ 	Added session storing of last random member so same member will not appear twice. Need move than 1 member in table!
+ 	
+ 	1.0.3
+ 	forked version
+ 	
+ */
+ 
 $plugin_info = array(
 	'pi_name'		=> 'Randember',
 	'pi_version'	=> '1.0.3',
@@ -53,70 +66,125 @@ class Random_member {
 
 		$group = $this->EE->TMPL->fetch_param('groupid');
 
-		$multiple = explode("|", $group);
-
-			$i = 0;
-			$c = count($multiple);
-
-		if ($group != "" && $multiple != "")
+		if ($group != "")
 		{
-			foreach ($multiple as $k => $v)
+			if(strrpos($group, "|") === FALSE)
 			{
-				if ($i++ < $c - 1)
+				// single group
+				
+				$sql_where = "group_id = '$group'";
+			}
+			else
+			{
+				// multiple groups
+				
+				$multiple = explode("|", $group);
+				$i = 0;
+				foreach ($multiple as $k => $v)
 				{
-					$sql_where .= "(group_id = '".$v."') OR ";
-				}
-				else
-				{
-					$sql_where .= "(group_id = '".$v."')";
+					if ($i++ < count($multiple) - 1)
+					{
+						$sql_where .= "(group_id = '".$v."') OR ";
+					}
+					else
+					{
+						$sql_where .= "(group_id = '".$v."')";
+					}
 				}
 			}
 		}
 
-		// Check to see if a group was specified
-		if ($group != "" && $c >= 2)
-		{
-			// Set sql with multiple group_id selection
-			$sql = "SELECT member_id FROM exp_members WHERE $sql_where";
+		// Check for returned values
+		$random_member = $this->find_member($sql_where);
+		if ( !$random_member )
+	    {			
+			// should maybe return something to indicate a fail
+			$random_member = 0;
 		}
-		else if ($group != "" && $c <= 1)
+		
+		// Return the member_id and replace the tag
+		$tagdata = $this->EE->TMPL->tagdata;
+		return $this->return_data = str_replace("{random_member}", $random_member, $tagdata);
+
+	}
+	
+	// ----------------------------------------------------------------
+	
+	/**
+	 * Find member ID not returned on last call
+	 *
+	 * Check session for last random
+	 * Loop until different
+	 * But bail out after 10 tries incase only 1 member!
+	 *
+	 */
+	 private function find_member($sql_where, $try = 0)
+	 {
+	 	
+		 // Find members from 1 or more groups
+		if ($sql_where)
 		{
-			// Set sql with one group_id selection
-			$sql = "SELECT `member_id` FROM `exp_members` WHERE `group_id`=$group";
+			$sql = "SELECT member_id FROM exp_members WHERE $sql_where ORDER BY RAND() LIMIT 0,1";
 		}
 		else
 		{
-			// Set sql for all available members
-			$sql = "SELECT `member_id` FROM `exp_members`";
+			// Find all available members
+			$sql = "SELECT `member_id` FROM `exp_members` ORDER BY RAND() LIMIT 0,1";
 		}
-			
+
 		// Run the query
 		$query = $this->EE->db->query($sql);
 
 		// Check for returned values
 		if ($query->num_rows() > 0)
 	    {
-	    	foreach($query->result_array() as $row)
+	    
+	    	$member_id		= $query->row('member_id');
+	    	$last_member_id	= isset($_SESSION['ntts_random_member']['member_id']) ? $_SESSION['ntts_random_member']['member_id'] : FALSE;
+	    	
+	    	// Get last id
+	    	if ( $last_member_id !== FALSE)
 	    	{
-	    		array_push($allmembers, $row['member_id']);
+	    		// Check if unique
+	    		if( $last_member_id != $member_id )
+	    		{
+		    		// Add to cache
+		    		$_SESSION['ntts_random_member']['member_id'] = $member_id;
+					return $member_id;
+	    		}
+	    		else
+	    		{
+	    			if($try >= 9){
+		    			return $member_id;
+	    			}
+	    			else
+	    			{
+			    		// Same as last so try again
+			    		$this->find_member($sql_where, $try++);
+			    	}
+	    		}
 	    	}
-
-	    	// Select one member_id randomly, aka NEO
-			$the_chosen_one = $allmembers[array_rand($allmembers, 1)];
-			
-			// Return the member_id and replace the tag
-			$tagdata = $this->EE->TMPL->tagdata;
-			return $this->return_data = str_replace("{random_member}", $the_chosen_one, $tagdata);
+	    	else
+	    	{
+	    		// Add to cache
+	    		$_SESSION['ntts_random_member']['member_id'] = $member_id;
+				return $member_id;
+			}
 		}
 		else
 		{
-			// do nothing
+			return FALSE;
 		}
+		
+		// NB
+		// Seemed obvious to use
+		// $this->EE->session->cache('ntts_random_member', 'member_id');
+		// $this->EE->session->set_cache('ntts_random_member', 'member_id', $member_id);
+		// BUT in the docs:
+		// 'Note, this is not persistent across requests'
 
-	}
-	
-	// ----------------------------------------------------------------
-	
+	 }
+	 
 	/**
 	 * Plugin Usage
 	 */
@@ -133,12 +201,16 @@ You can also use it to select a random member based on a member group id (single
 
 {exp:random_member groupid="3|5" parse="inward"} ... {random_member} ... {/exp:random_member}
 
+*If returned random_member == 0 then an error occoured. Likely no members in that group.
+
 <?php
 		$buffer = ob_get_contents();
 		ob_end_clean();
 		return $buffer;
 	}
 }
+
+
 
 
 /* End of file pi.random_member.php */
